@@ -1,5 +1,7 @@
 #include "ldni.hh"
 
+#include <algorithm>
+#include <cmath>
 #include <fstream>
 
 using namespace Geometry;
@@ -7,8 +9,90 @@ using namespace Geometry;
 
 // Main code
 
-LDNI mesh2ldni(const TriMesh &mesh, const std::array<size_t, 3> resolution) {
+inline double triangleArea(double ax, double ay, double bx, double by, double cx, double cy) {
+  return 0.5 * ((ax - cx) * (by - ay) - (ax - bx) * (cy - ay)); // signed area
+}
+
+static
+void checkTriangle(LDNI &ldni, size_t k0, const Point3D &a, const Point3D &b, const Point3D &c) {
+  Vector3D axis = ldni.bbox[1] - ldni.bbox[0];
+  Vector3D n = ((b - a) ^ (c - a)).normalize();
+  size_t k1 = (k0 + 1) % 3, k2 = (k0 + 2) % 3;
+  double area = triangleArea(a[k1], a[k2], b[k1], b[k2], c[k1], c[k2]);
+  if (std::abs(area) < epsilon)
+    return;
+
+  // Select the possible rays
+  double minx = std::min(a[k1], std::min(b[k1], c[k1]));
+  double maxx = std::max(a[k1], std::max(b[k1], c[k1]));
+  double miny = std::min(a[k2], std::min(b[k2], c[k2]));
+  double maxy = std::max(a[k2], std::max(b[k2], c[k2]));
+  minx = std::floor((minx - ldni.bbox[0][k1]) * ldni.res[k1] / axis[k1]);
+  maxx = std::ceil((maxx - ldni.bbox[0][k1]) * ldni.res[k1] / axis[k1]);
+  miny = std::floor((miny - ldni.bbox[0][k2]) * ldni.res[k2] / axis[k2]);
+  maxy = std::ceil((maxy - ldni.bbox[0][k2]) * ldni.res[k2] / axis[k2]);
+  size_t minx_i = std::min((size_t)std::max(minx, 0.0), ldni.res[k1] - 1);
+  size_t maxx_i = std::min((size_t)std::max(maxx, 0.0), ldni.res[k1] - 1);
+  size_t miny_i = std::min((size_t)std::max(miny, 0.0), ldni.res[k2] - 1);
+  size_t maxy_i = std::min((size_t)std::max(maxy, 0.0), ldni.res[k2] - 1);
+
+  // Check the intersections
+  for (size_t i = minx_i; i <= maxx_i; ++i) {
+    double u = ldni.bbox[0][k1] + i * axis[k1] / ldni.res[k1];
+    for (size_t j = miny_i; j <= maxy_i; ++j) {
+      double v = ldni.bbox[0][k2] + j * axis[k2] / ldni.res[k2];
+      // Compute barycentric coordiantes
+      double la = triangleArea(u, v, b[k1], b[k2], c[k1], c[k2]) / area;
+      double lb = triangleArea(u, v, c[k1], c[k2], a[k1], a[k2]) / area;
+      double lc = triangleArea(u, v, a[k1], a[k2], b[k1], b[k2]) / area;
+      if (0 <= la && la <= 1 && 0 <= lb && lb <= 1 && 0 <= lc && lc <= 1) {
+        double d = a[k0] * la + b[k0] * lb + c[k0] * lb - ldni.bbox[0][k0];
+        ldni.cells[k0][i*ldni.res[k2]+j].emplace_back(d, n);
+      }
+    }
+  }
+}
+
+LDNI mesh2ldni(const TriMesh &mesh, size_t size) {
+  // Compute the bounding box
+  Point3D boxmin, boxmax;
+  const auto &points = mesh.points();
+  boxmin = boxmax = points[0];
+  for (const auto &p : points)
+    for (int i = 0; i < 3; ++i) {
+      boxmin[i] = std::min(boxmin[i], p[i]);
+      boxmax[i] = std::max(boxmax[i], p[i]);
+    }
+  // Add 5%
+  auto mean = (boxmin + boxmax) / 2;
+  boxmin = mean + (boxmin - mean) * 1.05;
+  boxmax = mean + (boxmax - mean) * 1.05;
+
   LDNI ldni;
+  ldni.bbox[0] = boxmin; ldni.bbox[1] = boxmax;
+
+  // Compute the resolution
+  auto axis = boxmax - boxmin;
+  double axis_delta = axis.norm() / size;
+  ldni.res[0] = std::max<size_t>((size_t)std::ceil(axis[0] / axis_delta), 2);
+  ldni.res[1] = std::max<size_t>((size_t)std::ceil(axis[1] / axis_delta), 2);
+  ldni.res[2] = std::max<size_t>((size_t)std::ceil(axis[2] / axis_delta), 2);
+
+  // Allocate memory
+  ldni.cells[0].resize(ldni.res[1] * ldni.res[2]);
+  ldni.cells[1].resize(ldni.res[2] * ldni.res[0]);
+  ldni.cells[2].resize(ldni.res[0] * ldni.res[1]);
+
+  // Find the ray intersections
+  for (const auto &tri : mesh.triangles()) {
+    for (int c = 0; c < 3; ++c)
+      checkTriangle(ldni, c, points[tri[0]], points[tri[1]], points[tri[2]]);
+  }
+  // ... and sort them
+  for (int c = 0; c < 3; ++c)
+    for (auto &cell : ldni.cells[c])
+      std::sort(cell.begin(), cell.end());
+
   return ldni;
 }
 
@@ -27,7 +111,7 @@ static T readType(std::istream &is) {
   return *reinterpret_cast<T *>(block);
 }
 
-Vector3D readVector(std::istream &is) {
+static Vector3D readVector(std::istream &is) {
   float x = readType<float>(is);
   float y = readType<float>(is);
   float z = readType<float>(is);
@@ -42,7 +126,7 @@ LDNI readLDNI(std::string filename) {
   ldni.res[0] = readType<uint16_t>(f);
   ldni.res[1] = readType<uint16_t>(f);
   ldni.res[2] = readType<uint16_t>(f);
-  for (size_t i = 0; i < 3; ++i) {
+  for (int i = 0; i < 3; ++i) {
     size_t n = ldni.res[(i+1)%3] * ldni.res[(i+2)%3];
     ldni.cells[i].resize(n);
     for (size_t j = 0; j < n; ++j) {
@@ -51,7 +135,7 @@ LDNI readLDNI(std::string filename) {
       for (size_t k = 0; k < m; ++k) {
         double d = readType<float>(f);
         Vector3D n = readVector(f);
-        ldni.cells[i][j].push_back({d, n});
+        ldni.cells[i][j].emplace_back(d, n);
       }
     }
   }
@@ -80,12 +164,12 @@ void writeLDNI(const LDNI &ldni, std::string filename) {
   writeType<uint16_t>(f, ldni.res[0]);
   writeType<uint16_t>(f, ldni.res[1]);
   writeType<uint16_t>(f, ldni.res[2]);
-  for (size_t i = 0; i < 3; ++i)
+  for (int i = 0; i < 3; ++i)
     for (const auto &cell : ldni.cells[i]) {
       writeType<uint8_t>(f, cell.size());
       for (const auto &dn : cell) {
-        writeType<float>(f, dn.first);
-        writeVector(f, dn.second);
+        writeType<float>(f, dn.d);
+        writeVector(f, dn.n);
       }
     }
 }

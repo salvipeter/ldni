@@ -13,7 +13,14 @@ namespace Geometry {
   };
 }
 
-using Cell = std::vector<std::pair<double, Geometry::Vector3D>>;
+struct DepthNormal {
+  double d;
+  Geometry::Vector3D n;
+  DepthNormal(double d, const Geometry::Vector3D &n) : d(d), n(n) { }
+  bool operator<(const DepthNormal &dn) const { return d < dn.d; }
+};
+
+using Cell = std::vector<DepthNormal>;
 
 struct LDNI {
   Geometry::Point3D bbox[2];
@@ -21,7 +28,7 @@ struct LDNI {
   std::vector<Cell> cells[3];
 };
 
-LDNI mesh2ldni(const Geometry::TriMesh &mesh, const std::array<size_t, 3> resolution);
+LDNI mesh2ldni(const Geometry::TriMesh &mesh, size_t size);
 
 Geometry::QuadMesh ldni2mesh(const LDNI &ldni);
 
