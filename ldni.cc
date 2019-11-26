@@ -9,9 +9,6 @@
 
 using namespace Geometry;
 
-std::ofstream debug;
-size_t point_count = 1; // DEBUG
-
 
 // LDNI data generation
 
@@ -146,9 +143,8 @@ findCrossing(const LDNI &ldni, const std::array<size_t, 3> &index, int c0, size_
     if (dn.d > dist_max)
       break;
     if (dn.d >= dist_min) {
-      auto p =
-        ldni.bbox[0] + units[c0] * dn.d + ldni.dirs[c1] * index[c1] + ldni.dirs[c2] * index[c2];
-      debug << "v " << p << "\np " << point_count++ << std::endl;
+      auto p = ldni.bbox[0] + units[c0] * dn.d +
+        ldni.dirs[c1] * (index[c1] + d1) + ldni.dirs[c2] * (index[c2] + d2);
       return { { p, dn.n } };
     }
   }
@@ -238,7 +234,6 @@ void addQuads(QuadMesh &mesh, const LDNI &ldni, const std::vector<size_t> &cells
 }
 
 QuadMesh ldni2mesh(const LDNI &ldni) {
-  debug.open("/tmp/debug.obj");
   QuadMesh mesh;
   auto cells = addPoints(mesh, ldni);
   addQuads(mesh, ldni, cells);
