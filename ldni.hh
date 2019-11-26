@@ -24,6 +24,8 @@ using Cell = std::vector<DepthNormal>;
 
 struct LDNI {
   Geometry::Point3D bbox[2];
+  Geometry::Vector3D axis;     // = bbox[1] - bbox[0]
+  Geometry::Vector3D dirs[3];  // = {{axis[0]/res[0],0,0},{0,axis[1]/res[1],0},{0,0,axis[2]/res[2]}}
   size_t res[3];
   std::vector<Cell> cells[3];
 };
