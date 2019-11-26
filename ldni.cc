@@ -224,9 +224,9 @@ void addQuads(QuadMesh &mesh, const LDNI &ldni, const std::vector<size_t> &cells
           if (inside == insidep(ldni, index2))
             continue;
           if (inside)
-            mesh.addQuad(d, c, b, a);
-          else
             mesh.addQuad(a, b, c, d);
+          else
+            mesh.addQuad(d, c, b, a);
         }
       }
     }
