@@ -9,13 +9,18 @@
 
 using namespace Geometry;
 
+std::ofstream debug;
+size_t point_count = 1; // DEBUG
+
 
-// Main code
+// LDNI data generation
 
 inline double triangleArea(double ax, double ay, double bx, double by, double cx, double cy) {
   return 0.5 * ((ax - cx) * (by - ay) - (ax - bx) * (cy - ay)); // signed area
 }
 
+// Check if the (a,b,c) triangle is hit by any rays parallel to the k0 axis,
+// and update the LDNI data cell structure accordingly.
 static
 void checkTriangle(LDNI &ldni, size_t k0, const Point3D &a, const Point3D &b, const Point3D &c) {
   Vector3D n = ((b - a) ^ (c - a)).normalize();
@@ -40,10 +45,10 @@ void checkTriangle(LDNI &ldni, size_t k0, const Point3D &a, const Point3D &b, co
 
   // Check the intersections
   for (size_t i = mini; i <= maxi; ++i) {
-    double u = ldni.bbox[0][k1] + i * ldni.axis[k1] / ldni.res[k1];
+    double u = ldni.bbox[0][k1] + i * ldni.dirs[k1][k1];
     for (size_t j = minj; j <= maxj; ++j) {
-      double v = ldni.bbox[0][k2] + j * ldni.axis[k2] / ldni.res[k2];
-      // Compute barycentric coordiantes
+      double v = ldni.bbox[0][k2] + j * ldni.dirs[k2][k2];
+      // Compute barycentric coordinates
       double la = triangleArea(u, v, b[k1], b[k2], c[k1], c[k2]) / area;
       double lb = triangleArea(u, v, c[k1], c[k2], a[k1], a[k2]) / area;
       double lc = triangleArea(u, v, a[k1], a[k2], b[k1], b[k2]) / area;
@@ -103,6 +108,9 @@ LDNI mesh2ldni(const TriMesh &mesh, size_t size) {
   return ldni;
 }
 
+
+// Contouring
+
 static bool insidep(const LDNI &ldni, const std::array<size_t, 3> &index) {
   int votes = 0;
   for (int c0 = 0; c0 < 3; ++c0) {
@@ -121,8 +129,15 @@ static bool insidep(const LDNI &ldni, const std::array<size_t, 3> &index) {
   return votes >= 2;
 }
 
+// Finds the first crossing on the edge parallel to the c0 axis,
+// at the given index + 0 or 1 in the two non-axis directions (given by d1 and d2).
+// Returns std::nullopt when no crossing is found.
 static std::optional<std::pair<Point3D, Vector3D>>
 findCrossing(const LDNI &ldni, const std::array<size_t, 3> &index, int c0, size_t d1, size_t d2) {
+  static std::array<Vector3D, 3> units =
+    { { { 1, 0, 0 },
+        { 0, 1, 0 },
+        { 0, 0, 1 } } };
   int c1 = (c0 + 1) % 3, c2 = (c0 + 2) % 3;
   const auto &cell = ldni.cells[c0][(index[c1]+d1)*ldni.res[c2]+index[c2]+d2];
   double dist_min = ldni.axis[c0] * index[c0] / ldni.res[c0];
@@ -132,7 +147,8 @@ findCrossing(const LDNI &ldni, const std::array<size_t, 3> &index, int c0, size_
       break;
     if (dn.d >= dist_min) {
       auto p =
-        ldni.bbox[0] + ldni.dirs[c0] * dn.d + ldni.dirs[c1] * index[c1] + ldni.dirs[c2] * index[c2];
+        ldni.bbox[0] + units[c0] * dn.d + ldni.dirs[c1] * index[c1] + ldni.dirs[c2] * index[c2];
+      debug << "v " << p << "\np " << point_count++ << std::endl;
       return { { p, dn.n } };
     }
   }
@@ -176,9 +192,14 @@ std::vector<size_t> addPoints(QuadMesh &mesh, const LDNI &ldni) {
                 normals.push_back(dn->second);
               }
             }
+        if (points.empty()) {
+          cells.push_back(0);
+          continue;
+        }
 
         Point3D origin = ldni.bbox[0] + Vector3D(delta[0] * i, delta[1] * j, delta[2] * k);
-        Point3D surface_point = cellPoint(points, normals, origin, origin + delta);
+        auto surface_point = cellPoint(points, normals, origin, origin + delta);
+        // auto surface_point = origin + delta / 2; // Cell centers - "blocky" mesh
         mesh.addPoint(surface_point);
         cells.push_back(point_index++);
       }
@@ -217,6 +238,7 @@ void addQuads(QuadMesh &mesh, const LDNI &ldni, const std::vector<size_t> &cells
 }
 
 QuadMesh ldni2mesh(const LDNI &ldni) {
+  debug.open("/tmp/debug.obj");
   QuadMesh mesh;
   auto cells = addPoints(mesh, ldni);
   addQuads(mesh, ldni, cells);
@@ -259,9 +281,9 @@ LDNI readLDNI(std::string filename) {
       size_t m = readType<uint8_t>(f);
       ldni.cells[i][j].reserve(m);
       for (size_t k = 0; k < m; ++k) {
-        double d = readType<float>(f);
         Vector3D n = readVector(f);
-        ldni.cells[i][j].emplace_back(d, n);
+        double d = n.norm();
+        ldni.cells[i][j].emplace_back(d, n.normalize());
       }
     }
   }
@@ -293,10 +315,8 @@ void writeLDNI(const LDNI &ldni, std::string filename) {
   for (int i = 0; i < 3; ++i)
     for (const auto &cell : ldni.cells[i]) {
       writeType<uint8_t>(f, cell.size());
-      for (const auto &dn : cell) {
-        writeType<float>(f, dn.d);
-        writeVector(f, dn.n);
-      }
+      for (const auto &dn : cell)
+        writeVector(f, dn.n * dn.d);
     }
 }
 

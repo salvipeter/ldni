@@ -1,5 +1,15 @@
 #pragma once
 
+// Based on:
+// C.L. Wang, Y-Sh. Leung, Y. Chen:
+//   Solid modeling of polyhedral objects by Layered Depth-Normal Images on the GPU.
+//   In: Computer-Aided Design, Vol. 42, pp. 535-544, 2010.
+
+// Mesh building:
+// T. Ju, F. Losasso, S. Schaefer, J. Warren:
+//   Dual Contouring of Hermite Data.
+//   In: SIGGRAPH'02, pp. 339-346, 2002.
+
 #include <geometry.hh>
 namespace Geometry {
   struct QuadMesh {             // placeholder implementation
