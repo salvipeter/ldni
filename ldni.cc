@@ -28,25 +28,25 @@ void checkTriangle(LDNI &ldni, size_t k0, const Point3D &a, const Point3D &b, co
   double miny = std::min(a[k2], std::min(b[k2], c[k2]));
   double maxy = std::max(a[k2], std::max(b[k2], c[k2]));
   minx = std::floor((minx - ldni.bbox[0][k1]) * ldni.res[k1] / axis[k1]);
-  maxx = std::ceil((maxx - ldni.bbox[0][k1]) * ldni.res[k1] / axis[k1]);
+  maxx =  std::ceil((maxx - ldni.bbox[0][k1]) * ldni.res[k1] / axis[k1]);
   miny = std::floor((miny - ldni.bbox[0][k2]) * ldni.res[k2] / axis[k2]);
-  maxy = std::ceil((maxy - ldni.bbox[0][k2]) * ldni.res[k2] / axis[k2]);
-  size_t minx_i = std::min((size_t)std::max(minx, 0.0), ldni.res[k1] - 1);
-  size_t maxx_i = std::min((size_t)std::max(maxx, 0.0), ldni.res[k1] - 1);
-  size_t miny_i = std::min((size_t)std::max(miny, 0.0), ldni.res[k2] - 1);
-  size_t maxy_i = std::min((size_t)std::max(maxy, 0.0), ldni.res[k2] - 1);
+  maxy =  std::ceil((maxy - ldni.bbox[0][k2]) * ldni.res[k2] / axis[k2]);
+  size_t mini = std::min((size_t)std::max(minx, 0.0), ldni.res[k1] - 1);
+  size_t maxi = std::min((size_t)std::max(maxx, 0.0), ldni.res[k1] - 1);
+  size_t minj = std::min((size_t)std::max(miny, 0.0), ldni.res[k2] - 1);
+  size_t maxj = std::min((size_t)std::max(maxy, 0.0), ldni.res[k2] - 1);
 
   // Check the intersections
-  for (size_t i = minx_i; i <= maxx_i; ++i) {
+  for (size_t i = mini; i <= maxi; ++i) {
     double u = ldni.bbox[0][k1] + i * axis[k1] / ldni.res[k1];
-    for (size_t j = miny_i; j <= maxy_i; ++j) {
+    for (size_t j = minj; j <= maxj; ++j) {
       double v = ldni.bbox[0][k2] + j * axis[k2] / ldni.res[k2];
       // Compute barycentric coordiantes
       double la = triangleArea(u, v, b[k1], b[k2], c[k1], c[k2]) / area;
       double lb = triangleArea(u, v, c[k1], c[k2], a[k1], a[k2]) / area;
       double lc = triangleArea(u, v, a[k1], a[k2], b[k1], b[k2]) / area;
       if (0 <= la && la <= 1 && 0 <= lb && lb <= 1 && 0 <= lc && lc <= 1) {
-        double d = a[k0] * la + b[k0] * lb + c[k0] * lb - ldni.bbox[0][k0];
+        double d = a[k0] * la + b[k0] * lb + c[k0] * lc - ldni.bbox[0][k0];
         ldni.cells[k0][i*ldni.res[k2]+j].emplace_back(d, n);
       }
     }
