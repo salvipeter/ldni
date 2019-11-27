@@ -10,9 +10,9 @@ if(CMAKE_COMPILER_IS_GNUCXX)
   set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 endif(CMAKE_COMPILER_IS_GNUCXX)
 
-set(Transfinite_DIR "../transfinite/src") # https://github.com/salvipeter/transfinite
-include_directories("${Transfinite_DIR}/geom" ${EIGEN3_INCLUDE_DIR})
-link_directories("${Transfinite_DIR}/geom/Release" "${Transfinite_DIR}/../release/geom")
+set(LIBGEOM_DIR "../libgeom") # https://github.com/salvipeter/libgeom
+include_directories("${LIBGEOM_DIR}" ${EIGEN3_INCLUDE_DIR})
+link_directories("${LIBGEOM_DIR}/release")
 
 add_library(ldni STATIC ldni.cc cell-point.cc)
 
