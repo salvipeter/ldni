@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
               << std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count()
               << "ms" << std::endl;
     std::cout << "Resolution: "
-              << ldni.res[0] - 1 << "x" << ldni.res[1] - 1 << "x" << ldni.res[2] - 1 << std::endl;
+              << ldni.res[0] << "x" << ldni.res[1] << "x" << ldni.res[2] << std::endl;
 
     writeLDNI(ldni, "/tmp/test.ldni");
     std::cout << "LDNI file written (/tmp/test.ldni)." << std::endl;
