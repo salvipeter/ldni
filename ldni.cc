@@ -57,30 +57,13 @@ void checkTriangle(LDNI &ldni, size_t k0, const Point3D &a, const Point3D &b, co
   }
 }
 
-LDNI mesh2ldni(const TriMesh &mesh, size_t size) {
-  // Compute the bounding box
-  Point3D boxmin, boxmax;
-  const auto &points = mesh.points();
-  boxmin = boxmax = points[0];
-  for (const auto &p : points)
-    for (int i = 0; i < 3; ++i) {
-      boxmin[i] = std::min(boxmin[i], p[i]);
-      boxmax[i] = std::max(boxmax[i], p[i]);
-    }
-  // Add 5%
-  auto mean = (boxmin + boxmax) / 2;
-  boxmin = mean + (boxmin - mean) * 1.05;
-  boxmax = mean + (boxmax - mean) * 1.05;
-
+static LDNI mesh2ldni(const Geometry::TriMesh &mesh,
+                      const std::array<Point3D, 2> &bbox,
+                      const std::array<size_t, 3> &resolution) {
   LDNI ldni;
-  ldni.bbox[0] = boxmin; ldni.bbox[1] = boxmax;
-  ldni.axis = boxmax - boxmin;
-
-  // Compute the resolution
-  double axis_delta = ldni.axis.norm() / size / std::sqrt(3);
-  ldni.res[0] = std::max<size_t>((size_t)std::ceil(ldni.axis[0] / axis_delta), 2);
-  ldni.res[1] = std::max<size_t>((size_t)std::ceil(ldni.axis[1] / axis_delta), 2);
-  ldni.res[2] = std::max<size_t>((size_t)std::ceil(ldni.axis[2] / axis_delta), 2);
+  ldni.bbox[0] = bbox[0]; ldni.bbox[1] = bbox[1];
+  ldni.axis = ldni.bbox[1] - ldni.bbox[0];
+  ldni.res[0] = resolution[0]; ldni.res[1] = resolution[1]; ldni.res[2] = resolution[2];
 
   // Ray edge vectors
   ldni.dirs[0] = Vector3D(ldni.axis[0] / ldni.res[0], 0, 0);
@@ -93,6 +76,7 @@ LDNI mesh2ldni(const TriMesh &mesh, size_t size) {
   ldni.rays[2].resize((ldni.res[0] + 1) * (ldni.res[1] + 1));
 
   // Find the ray intersections
+  const auto &points = mesh.points();
   for (const auto &tri : mesh.triangles()) {
     for (int c = 0; c < 3; ++c)
       checkTriangle(ldni, c, points[tri[0]], points[tri[1]], points[tri[2]]);
@@ -103,6 +87,38 @@ LDNI mesh2ldni(const TriMesh &mesh, size_t size) {
       std::sort(ray.begin(), ray.end());
 
   return ldni;
+}
+
+static std::array<Point3D, 2> boundingBox(const TriMesh &mesh) {
+  Point3D boxmin, boxmax;
+  const auto &points = mesh.points();
+  boxmin = boxmax = points[0];
+  for (const auto &p : points)
+    for (int i = 0; i < 3; ++i) {
+      boxmin[i] = std::min(boxmin[i], p[i]);
+      boxmax[i] = std::max(boxmax[i], p[i]);
+    }
+  // Add 5%
+  auto mean = (boxmin + boxmax) / 2;
+  boxmin = mean + (boxmin - mean) * 1.05;
+  boxmax = mean + (boxmax - mean) * 1.05;
+  return { boxmin, boxmax };
+}
+
+LDNI mesh2ldni(const TriMesh &mesh, const std::array<size_t, 3> &resolution) {
+  auto bbox = boundingBox(mesh);
+  return mesh2ldni(mesh, bbox, resolution);
+}
+
+LDNI mesh2ldni(const TriMesh &mesh, size_t size) {
+  std::array<size_t, 3> resolution;
+  auto bbox = boundingBox(mesh);
+  auto axis = bbox[1] - bbox[0];
+  double axis_delta = axis.norm() / size / std::sqrt(3);
+  resolution[0] = std::max<size_t>((size_t)std::ceil(axis[0] / axis_delta), 2);
+  resolution[1] = std::max<size_t>((size_t)std::ceil(axis[1] / axis_delta), 2);
+  resolution[2] = std::max<size_t>((size_t)std::ceil(axis[2] / axis_delta), 2);
+  return mesh2ldni(mesh, bbox, resolution);
 }
 
 

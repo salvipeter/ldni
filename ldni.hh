@@ -42,6 +42,8 @@ struct LDNI {
 
 LDNI mesh2ldni(const Geometry::TriMesh &mesh, size_t size);
 
+LDNI mesh2ldni(const Geometry::TriMesh &mesh, const std::array<size_t, 3> &resolution);
+
 Geometry::QuadMesh ldni2mesh(const LDNI &ldni);
 
 LDNI readLDNI(std::string filename);
