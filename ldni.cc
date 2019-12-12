@@ -168,15 +168,15 @@ findCrossing(const LDNI &ldni, const std::array<size_t, 3> &index, int c0, size_
 }
 
 std::vector<size_t> addPoints(QuadMesh &mesh, const LDNI &ldni) {
-  std::vector<size_t> cells;
-  cells.reserve(ldni.res[0] * ldni.res[1] * ldni.res[2]);
+  std::vector<size_t> cells(ldni.res[0] * ldni.res[1] * ldni.res[2], 0);
 
-  Vector3D delta(ldni.dirs[0][0], ldni.dirs[1][1], ldni.dirs[2][2]);
+  const Vector3D delta = { ldni.dirs[0][0], ldni.dirs[1][1], ldni.dirs[2][2] };
 
-  size_t point_index = 1;
+#pragma omp parallel for
   for (size_t i = 0; i < ldni.res[0]; ++i) {
+    size_t index = i * ldni.res[1] * ldni.res[2];
     for (size_t j = 0; j < ldni.res[1]; ++j) {
-      for (size_t k = 0; k < ldni.res[2]; ++k) {
+      for (size_t k = 0; k < ldni.res[2]; ++k, ++index) {
 
         // Check if it is an interesting cell
         bool found_inside = false, found_outside = false;
@@ -187,10 +187,8 @@ std::vector<size_t> addPoints(QuadMesh &mesh, const LDNI &ldni) {
                 found_inside = true;
               else
                 found_outside = true;
-        if (!found_inside || !found_outside) {
-          cells.push_back(0);
+        if (!found_inside || !found_outside)
           continue;
-        }
 
         // Compute crossing data
         std::vector<Point3D> points;
@@ -204,16 +202,17 @@ std::vector<size_t> addPoints(QuadMesh &mesh, const LDNI &ldni) {
                 normals.push_back(dn->second);
               }
             }
-        if (points.empty()) {
-          cells.push_back(0);
+        if (points.empty())
           continue;
-        }
 
         Point3D origin = ldni.bbox[0] + Vector3D(delta[0] * i, delta[1] * j, delta[2] * k);
         auto surface_point = cellPoint(points, normals, origin, origin + delta);
         // auto surface_point = origin + delta / 2; // Cell centers - "blocky" mesh
-        mesh.addPoint(surface_point);
-        cells.push_back(point_index++);
+#pragma omp critical
+        {
+          mesh.addPoint(surface_point);
+          cells[index] = mesh.points.size();
+        }
       }
     }
   }
@@ -222,7 +221,8 @@ std::vector<size_t> addPoints(QuadMesh &mesh, const LDNI &ldni) {
 }
 
 void addQuads(QuadMesh &mesh, const LDNI &ldni, const std::vector<size_t> &cells) {
-  std::array<size_t, 3> ns = { ldni.res[1] * ldni.res[2], ldni.res[2], 1 };
+  const std::array<size_t, 3> ns = { ldni.res[1] * ldni.res[2], ldni.res[2], 1 };
+#pragma omp parallel for
   for (size_t c0 = 0; c0 < 3; ++c0) {
     int c1 = (c0 + 1) % 3, c2 = (c0 + 2) % 3;
     size_t ni = ns[c0], nj = ns[c1], nk = ns[c2];
@@ -233,12 +233,13 @@ void addQuads(QuadMesh &mesh, const LDNI &ldni, const std::vector<size_t> &cells
           size_t a = cells[index], b = cells[index-nj], c = cells[index-nj-nk], d = cells[index-nk];
           if (a * b * c * d == 0)
             continue;
-          static std::array<size_t, 3> index1, index2;
+          std::array<size_t, 3> index1, index2;
           index1[c0] = i;     index1[c1] = j; index1[c2] = k;
           index2[c0] = i + 1; index2[c1] = j; index2[c2] = k;
           bool inside = insidep(ldni, index1);
           if (inside == insidep(ldni, index2))
             continue;
+#pragma omp critical
           if (inside)
             mesh.addQuad(a, b, c, d);
           else
