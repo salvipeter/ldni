@@ -210,7 +210,7 @@ std::vector<size_t> addPoints(QuadMesh &mesh, const LDNI &ldni) {
         // auto surface_point = origin + delta / 2; // Cell centers - "blocky" mesh
 #pragma omp critical
         {
-          mesh.addPoint(surface_point);
+          mesh.points.push_back(surface_point);
           cells[index] = mesh.points.size();
         }
       }
@@ -222,11 +222,12 @@ std::vector<size_t> addPoints(QuadMesh &mesh, const LDNI &ldni) {
 
 void addQuads(QuadMesh &mesh, const LDNI &ldni, const std::vector<size_t> &cells) {
   const std::array<size_t, 3> ns = { ldni.res[1] * ldni.res[2], ldni.res[2], 1 };
-#pragma omp parallel for
   for (size_t c0 = 0; c0 < 3; ++c0) {
-    int c1 = (c0 + 1) % 3, c2 = (c0 + 2) % 3;
-    size_t ni = ns[c0], nj = ns[c1], nk = ns[c2];
+    const int c1 = (c0 + 1) % 3, c2 = (c0 + 2) % 3;
+    const size_t ni = ns[c0], nj = ns[c1], nk = ns[c2];
+#pragma omp parallel for
     for (size_t i = 0; i < ldni.res[c0]; ++i) {
+      std::vector<QuadMesh::Quad> quads;
       for (size_t j = 1; j < ldni.res[c1]; ++j) {
         for (size_t k = 1; k < ldni.res[c2]; ++k) {
           size_t index = i * ni + j * nj + k * nk;
@@ -239,13 +240,14 @@ void addQuads(QuadMesh &mesh, const LDNI &ldni, const std::vector<size_t> &cells
           bool inside = insidep(ldni, index1);
           if (inside == insidep(ldni, index2))
             continue;
-#pragma omp critical
           if (inside)
-            mesh.addQuad(a, b, c, d);
+            quads.push_back({a, b, c, d});
           else
-            mesh.addQuad(d, c, b, a);
+            quads.push_back({d, c, b, a});
         }
       }
+#pragma omp critical
+      mesh.quads.insert(mesh.quads.end(), quads.begin(), quads.end());
     }
   }
 }
@@ -333,17 +335,7 @@ void writeLDNI(const LDNI &ldni, std::string filename) {
 }
 
 
-// Basic quad mesh implementation (to be removed later)
-
-void
-QuadMesh::addPoint(const Point3D &p) {
-  points.push_back(p);
-}
-
-void
-QuadMesh::addQuad(size_t a, size_t b, size_t c, size_t d) {
-  quads.push_back({a, b, c, d});
-}
+// Quad mesh output
 
 void
 QuadMesh::writeOBJ(std::string filename) const {
